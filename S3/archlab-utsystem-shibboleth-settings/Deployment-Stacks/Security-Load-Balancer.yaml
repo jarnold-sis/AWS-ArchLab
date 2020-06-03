@@ -1,0 +1,379 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  CIDRAZ1:
+    AllowedPattern: >-
+      ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/(1[6-9]|2[0-8]))$
+    ConstraintDescription: CIDR block parameter must be in the form x.x.x.x/16-28
+    Default: 10.100.24.0/24
+    Description: CIDR block for Public subnet located in Availability Zone 1
+    Type: String
+  CIDRAZ2:
+    AllowedPattern: >-
+      ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/(1[6-9]|2[0-8]))$
+    ConstraintDescription: CIDR block parameter must be in the form x.x.x.x/16-28
+    Default: 10.100.25.0/24
+    Description: CIDR block for Public subnet located in Availability Zone 2
+    Type: String
+  S3BucketName:
+    Description: Name of S3 Bucket with Deployment and Configuration files
+    Type: String
+    Default: utsystem-shibboleth-settings
+  SSLCertARN:
+    Description: ARN to SSL Certificate for LoadBalancer
+    Type: String
+    AllowedPattern: ^arn:aws:acm:us-[\w-]{5}\d:\d{12}:certificate\/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}
+    ConstraintDescription: Must be format as AWS Resource Number (ARN)
+    Default: arn:aws:acm:us-east-1:011106660368:certificate/dbbfc42a-634b-40ce-9373-a0f5d38462bd
+  OutagePageHost:
+    Description: FQDN Hostname for Outage Page
+    Type: String
+    AllowedPattern: (?=^.{4,253}$)(^((?!-)[a-zA-Z0-9-]{1,63}(?<!-)\.)+[a-zA-Z]{2,63}$)
+    ConstraintDescription: Must be a FQDN Hostname
+    Default: outage.aws.utshare.utsystem.edu
+  HostedZone:
+    Description: Hosted Route53 Zone
+    Type: String
+    AllowedPattern: (?=^.{4,253}$)(^((?!-)[a-zA-Z0-9-]{1,63}(?<!-)\.)+[a-zA-Z]{2,63}$)
+    ConstraintDescription: Must be a FQDN Zone Name without the period on the end.
+    Default: aws.utshare.utsystem.edu
+  SSMPassParameter:
+    Description: SSM Parameter for Zip file Password
+    Type: String
+    Default: DiscSrv-Password
+  CreateLogGroup:
+    Description: Create New LogGroup or use excisting one
+    Type: String
+    AllowedValues:
+      - true
+      - false
+    Default: false
+  LogGroupName:
+    Description: Name of CloudWatch LogGroup to store logs in.
+    Type: String
+    Default: 'DiscoverySrvHosts'
+Conditions:
+  LogGroupCreate: !Equals [ !Ref CreateLogGroup, true ]
+Resources:
+  LogGroup:
+    Type: 'AWS::Logs::LogGroup'
+    Condition: LogGroupCreate
+    Properties:
+      LogGroupName: !Ref LogGroupName
+      RetentionInDays: 90
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: b7e88244-066e-451d-8f26-e4c73d44fc3b
+  UTSystemHostAccess:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: UTSystem-Host-Access
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: 'sts:AssumeRole'
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 03acd0de-af80-4ee0-9756-f944eb63bde2
+  UTSystemWAYFS3ReadAccess:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: UTSystem-WAYF-S3-ReadAccess
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - 's3:GetObject'
+              - 's3:GetBucketTagging'
+              - 's3:GetObjectVersionTagging'
+              - 's3:GetObjectTagging'
+              - 's3:ListBucket'
+              - 's3:GetObjectVersion'
+            Resource:
+              - !Sub
+                - 'arn:aws:s3:::${BucketName}/*'
+                - BucketName: !Ref S3BucketName
+              - !Sub
+                - 'arn:aws:s3:::${BucketName}'
+                - BucketName: !Ref S3BucketName
+      Roles:
+        - !Ref UTSystemHostAccess
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 631dc08b-eaf7-44ea-bf8e-3879f6a90a0d
+  UTSystemWAYFLogAccess:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: UTSystem-WAYF-Log-Access
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'logs:CreateLogStream'
+              - 'logs:GetLogEvents'
+              - 'logs:PutLogEvents'
+              - 'logs:DescribeLogGroups'
+              - 'logs:DescribeLogStreams'
+              - 'logs:PutRetentionPolicy'
+              - 'logs:PutMetricFilter'
+              - 'logs:CreateLogGroup'
+            Resource: 
+              - !Sub 
+                - 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${LogGroupParm}:*'
+                - LogGroupParm: !Ref LogGroupName
+      Roles:
+        - !Ref UTSystemHostAccess
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: e99fab14-e540-4da4-96ee-83e5f48512e0
+  UTSystemWAYFSSMReadAccess:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: UTSystem-WAYF-SSM-ReadAccess
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'ssm:GetParameter'
+              - 'ssm:GetParameters'
+            Resource:
+              - !Sub 
+                - 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${PassParm}'
+                - PassParm: !Ref SSMPassParameter
+      Roles:
+        - !Ref UTSystemHostAccess        
+  EC2IAMInstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      InstanceProfileName: UTSystem-Shibboleth-Profile
+      Roles:
+        - !Ref UTSystemHostAccess
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 72d1872e-35b3-432f-821a-f703866a9778
+  ELBSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Enable HTTPS access on the inbound port
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 0.0.0.0/0
+      VpcId: !ImportValue VPCID
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 884dc4d3-3219-4d77-8c7d-68ca7542518a
+  InstanceSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Enable HTTP access on the configured port
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          SourceSecurityGroupId: !Ref ELBSecurityGroup
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: !Ref CIDRAZ1
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: !Ref CIDRAZ2
+      VpcId: !ImportValue VPCID
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: e8b8d2e6-f578-42b9-afa1-f7b1fb3b1449
+  ApplicationLoadBalancer:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      Subnets:
+        - !ImportValue AZ1PubSubnetID
+        - !ImportValue AZ2PubSubnetID
+      SecurityGroups:
+        - !Ref ELBSecurityGroup
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: eeb911ba-239d-4fc5-b8b3-2714a53cb983
+  ELBListener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      Certificates:
+        - CertificateArn: !Ref SSLCertARN
+      DefaultActions:
+        - RedirectConfig:
+            Host: !Ref OutagePageHost
+            Path: /
+            Port: 443
+            Protocol: HTTPS
+            StatusCode: HTTP_301
+          Type: redirect
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: '443'
+      Protocol: HTTPS
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 87a0c341-a89b-461d-bdf1-a345b1af826c
+  DNSELBCNAME:
+    Type: 'AWS::Route53::RecordSet'
+    Properties:
+      HostedZoneName: !Sub
+        - '${ZoneFQDN}.'
+        - ZoneFQDN: !Ref HostedZone
+      Name: !Sub
+        - 'discoverysrv.${ZoneFQDN}.'
+        - ZoneFQDN: !Ref HostedZone
+      Type: CNAME
+      TTL: 900
+      ResourceRecords:
+        - !GetAtt ApplicationLoadBalancer.DNSName
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: a3eb3604-ca69-48e2-8b2e-3207a716d6c8
+    DependsOn:
+      - ApplicationLoadBalancer
+Outputs:
+  EC2IAMInstanceProfile:
+    Description: EC2 IAM Instance Profile Resource
+    Value: !Ref EC2IAMInstanceProfile
+    Export:
+      Name: EC2IAMInstProfile
+  LoadBalancerARN:
+    Description: ELB ARN Value
+    Value: !Ref ApplicationLoadBalancer
+    Export:
+      Name: LoadBalancerARN
+  ELBListener:
+    Description: ELB ARN Value
+    Value: !Ref ELBListener
+    Export:
+      Name: ELBListenerARN
+  InstanceSG:
+    Description: Instance Security Group
+    Value: !Ref InstanceSecurityGroup
+    Export:
+      Name: InstanceSecGroup
+  LoadBalancerFQDN:
+    Description: Base FQDN for Application LoadBalancer
+    Value: !Ref DNSELBCNAME
+    Export:
+      Name: LoadBalancerFQDN
+Metadata:
+  'AWS::CloudFormation::Designer':
+    884dc4d3-3219-4d77-8c7d-68ca7542518a:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: -90
+        'y': 220
+      z: 1
+      embeds: []
+    eeb911ba-239d-4fc5-b8b3-2714a53cb983:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: -200
+        'y': 220
+      z: 1
+      embeds: []
+      isassociatedwith:
+        - 884dc4d3-3219-4d77-8c7d-68ca7542518a
+    87a0c341-a89b-461d-bdf1-a345b1af826c:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: -200
+        'y': 110
+      z: 1
+      embeds: []
+      isassociatedwith:
+        - eeb911ba-239d-4fc5-b8b3-2714a53cb983
+    e8b8d2e6-f578-42b9-afa1-f7b1fb3b1449:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: -90
+        'y': 340
+      z: 1
+      embeds: []
+    03acd0de-af80-4ee0-9756-f944eb63bde2:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 120
+        'y': 220
+      z: 1
+      embeds: []
+    72d1872e-35b3-432f-821a-f703866a9778:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 0
+        'y': 220
+      z: 1
+      embeds: []
+      isassociatedwith:
+        - 03acd0de-af80-4ee0-9756-f944eb63bde2
+    631dc08b-eaf7-44ea-bf8e-3879f6a90a0d:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 120
+        'y': 340
+      z: 1
+      embeds: []
+      isassociatedwith:
+        - 03acd0de-af80-4ee0-9756-f944eb63bde2
+    a3eb3604-ca69-48e2-8b2e-3207a716d6c8:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: -320
+        'y': 220
+      z: 1
+      embeds: []
+    b7e88244-066e-451d-8f26-e4c73d44fc3b:
+      size:
+        width: 150
+        height: 150
+      position:
+        x: 360
+        'y': 170
+      z: 1
+      embeds: []
+    e99fab14-e540-4da4-96ee-83e5f48512e0:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 120
+        'y': 100
+      z: 1
+      embeds: []
+      isassociatedwith:
+        - 03acd0de-af80-4ee0-9756-f944eb63bde2
+    93f67ca7-10be-4e4e-af05-da8c92edc7de:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 240
+        'y': 220
+      z: 1
+      embeds: []
+      isassociatedwith:
+        - 03acd0de-af80-4ee0-9756-f944eb63bde2

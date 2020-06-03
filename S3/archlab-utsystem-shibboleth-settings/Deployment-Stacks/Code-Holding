@@ -1,0 +1,66 @@
+  utsystemds:
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      TemplateURL: !Sub 
+        - >-
+          https://${BucketName}.s3.amazonaws.com/Deployment-Stacks/DiscoverySrv-Cluster.yaml
+        - BucketName: !Ref S3BucketName
+      Parameters:
+        ClusterHost: utsystemds
+        KeyName: !Ref SSHKeyName
+        InstanceType: !Ref NodeInstanceType
+        RulePriority: 1
+        HostedZone: !Ref HostedZone
+        S3BucketName: !Ref S3BucketName
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-utsystemds'
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 398a9300-f498-4f52-8874-7e8ed269a74c
+    DependsOn:
+      - SecurityELB
+  utshareds:
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      TemplateURL: !Sub 
+        - >-
+          https://${BucketName}.s3.amazonaws.com/Deployment-Stacks/DiscoverySrv-Cluster.yaml
+        - BucketName: !Ref S3BucketName
+      Parameters:
+        ClusterHost: utshareds
+        KeyName: !Ref SSHKeyName
+        InstanceType: !Ref NodeInstanceType
+        RulePriority: 2
+        HostedZone: !Ref HostedZone
+        S3BucketName: !Ref S3BucketName
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-utshareds'
+    DependsOn:
+      - SecurityELB
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 9b4060af-b19c-4bb2-908a-3d39a26de484
+  benefitsds:
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      TemplateURL: !Sub 
+        - >-
+          https://${BucketName}.s3.amazonaws.com/Deployment-Stacks/DiscoverySrv-Cluster.yaml
+        - BucketName: !Ref S3BucketName
+      Parameters:
+        ClusterHost: benefitsds
+        KeyName: !Ref SSHKeyName
+        InstanceType: !Ref NodeInstanceType
+        RulePriority: 3
+        HostedZone: !Ref HostedZone
+        S3BucketName: !Ref S3BucketName        
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-benefitsds'
+    DependsOn:
+      - SecurityELB
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 425231d4-d54f-4597-ba4c-3ebb6bff7afe

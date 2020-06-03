@@ -1,0 +1,830 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  ClusterHost:
+    Description: >-
+      The Short Host Name.  .aws.utshare.utsystem.edu will be appended to this. 
+      Allowed Values: utsystemds, utshareds, benefitsds
+    Type: String
+    Default: utsystemds
+    AllowedValues:
+      - utsystemds
+      - utshareds
+      - benefitsds
+  KeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
+    Type: 'AWS::EC2::KeyPair::KeyName'
+    ConstraintDescription: must be the name of an existing EC2 KeyPair.
+  InstanceType:
+    Description: WebServer EC2 instance type
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t1.micro
+      - t2.nano
+      - t2.micro
+      - t2.small
+      - t2.medium
+      - t2.large
+      - m1.small
+      - m1.medium
+      - m1.large
+      - m1.xlarge
+      - m2.xlarge
+      - m2.2xlarge
+      - m2.4xlarge
+      - m3.medium
+      - m3.large
+      - m3.xlarge
+      - m3.2xlarge
+      - m4.large
+      - m4.xlarge
+      - m4.2xlarge
+      - m4.4xlarge
+      - m4.10xlarge
+      - c1.medium
+      - c1.xlarge
+      - c3.large
+      - c3.xlarge
+      - c3.2xlarge
+      - c3.4xlarge
+      - c3.8xlarge
+      - c4.large
+      - c4.xlarge
+      - c4.2xlarge
+      - c4.4xlarge
+      - c4.8xlarge
+      - g2.2xlarge
+      - g2.8xlarge
+      - r3.large
+      - r3.xlarge
+      - r3.2xlarge
+      - r3.4xlarge
+      - r3.8xlarge
+      - i2.xlarge
+      - i2.2xlarge
+      - i2.4xlarge
+      - i2.8xlarge
+      - d2.xlarge
+      - d2.2xlarge
+      - d2.4xlarge
+      - d2.8xlarge
+      - hi1.4xlarge
+      - hs1.8xlarge
+      - cr1.8xlarge
+      - cc2.8xlarge
+      - cg1.4xlarge
+    ConstraintDescription: must be a valid EC2 instance type.
+  RulePriority:
+    Description: Unique Rule Priority
+    Type: Number
+    MinValue: 1
+    MaxValue: 50000
+  HostedZone:
+    Description: Hosted Route53 Zone
+    Type: String
+    AllowedPattern: (?=^.{4,253}$)(^((?!-)[a-zA-Z0-9-]{1,63}(?<!-)\.)+[a-zA-Z]{2,63}$)
+    ConstraintDescription: Must be a FQDN Zone Name without the period on the end.
+    Default: archlab.utshare.utsystem.edu
+  S3BucketName:
+    Description: Name of S3 Bucket with Deployment and Configuration files
+    Type: String
+    Default: archlab-utsystem-shibboleth-settings
+  SSMPassParameter:
+    Description: SSM Parameter for Zip file Password
+    Type: String
+    Default: DiscSrv-Password
+  LogGroupName:
+    Description: Name of CloudWatch LogGroup to store logs in.
+    Type: String
+    Default: 'DiscoverySrvHosts'
+Mappings:
+  HostToGroup:
+    utsystemds:
+      Group: utsystem
+    utshareds:
+      Group: utshare
+    benefitsds:
+      Group: benefitsfocus
+  AWSInstanceType2Arch:
+    t1.micro:
+      Arch: HVM64
+    t2.nano:
+      Arch: HVM64
+    t2.micro:
+      Arch: HVM64
+    t2.small:
+      Arch: HVM64
+    t2.medium:
+      Arch: HVM64
+    t2.large:
+      Arch: HVM64
+    m1.small:
+      Arch: HVM64
+    m1.medium:
+      Arch: HVM64
+    m1.large:
+      Arch: HVM64
+    m1.xlarge:
+      Arch: HVM64
+    m2.xlarge:
+      Arch: HVM64
+    m2.2xlarge:
+      Arch: HVM64
+    m2.4xlarge:
+      Arch: HVM64
+    m3.medium:
+      Arch: HVM64
+    m3.large:
+      Arch: HVM64
+    m3.xlarge:
+      Arch: HVM64
+    m3.2xlarge:
+      Arch: HVM64
+    m4.large:
+      Arch: HVM64
+    m4.xlarge:
+      Arch: HVM64
+    m4.2xlarge:
+      Arch: HVM64
+    m4.4xlarge:
+      Arch: HVM64
+    m4.10xlarge:
+      Arch: HVM64
+    c1.medium:
+      Arch: HVM64
+    c1.xlarge:
+      Arch: HVM64
+    c3.large:
+      Arch: HVM64
+    c3.xlarge:
+      Arch: HVM64
+    c3.2xlarge:
+      Arch: HVM64
+    c3.4xlarge:
+      Arch: HVM64
+    c3.8xlarge:
+      Arch: HVM64
+    c4.large:
+      Arch: HVM64
+    c4.xlarge:
+      Arch: HVM64
+    c4.2xlarge:
+      Arch: HVM64
+    c4.4xlarge:
+      Arch: HVM64
+    c4.8xlarge:
+      Arch: HVM64
+    g2.2xlarge:
+      Arch: HVMG2
+    g2.8xlarge:
+      Arch: HVMG2
+    r3.large:
+      Arch: HVM64
+    r3.xlarge:
+      Arch: HVM64
+    r3.2xlarge:
+      Arch: HVM64
+    r3.4xlarge:
+      Arch: HVM64
+    r3.8xlarge:
+      Arch: HVM64
+    i2.xlarge:
+      Arch: HVM64
+    i2.2xlarge:
+      Arch: HVM64
+    i2.4xlarge:
+      Arch: HVM64
+    i2.8xlarge:
+      Arch: HVM64
+    d2.xlarge:
+      Arch: HVM64
+    d2.2xlarge:
+      Arch: HVM64
+    d2.4xlarge:
+      Arch: HVM64
+    d2.8xlarge:
+      Arch: HVM64
+    hi1.4xlarge:
+      Arch: HVM64
+    hs1.8xlarge:
+      Arch: HVM64
+    cr1.8xlarge:
+      Arch: HVM64
+    cc2.8xlarge:
+      Arch: HVM64
+  AWSInstanceType2NATArch:
+    t1.micro:
+      Arch: NATHVM64
+    t2.nano:
+      Arch: NATHVM64
+    t2.micro:
+      Arch: NATHVM64
+    t2.small:
+      Arch: NATHVM64
+    t2.medium:
+      Arch: NATHVM64
+    t2.large:
+      Arch: NATHVM64
+    m1.small:
+      Arch: NATHVM64
+    m1.medium:
+      Arch: NATHVM64
+    m1.large:
+      Arch: NATHVM64
+    m1.xlarge:
+      Arch: NATHVM64
+    m2.xlarge:
+      Arch: NATHVM64
+    m2.2xlarge:
+      Arch: NATHVM64
+    m2.4xlarge:
+      Arch: NATHVM64
+    m3.medium:
+      Arch: NATHVM64
+    m3.large:
+      Arch: NATHVM64
+    m3.xlarge:
+      Arch: NATHVM64
+    m3.2xlarge:
+      Arch: NATHVM64
+    m4.large:
+      Arch: NATHVM64
+    m4.xlarge:
+      Arch: NATHVM64
+    m4.2xlarge:
+      Arch: NATHVM64
+    m4.4xlarge:
+      Arch: NATHVM64
+    m4.10xlarge:
+      Arch: NATHVM64
+    c1.medium:
+      Arch: NATHVM64
+    c1.xlarge:
+      Arch: NATHVM64
+    c3.large:
+      Arch: NATHVM64
+    c3.xlarge:
+      Arch: NATHVM64
+    c3.2xlarge:
+      Arch: NATHVM64
+    c3.4xlarge:
+      Arch: NATHVM64
+    c3.8xlarge:
+      Arch: NATHVM64
+    c4.large:
+      Arch: NATHVM64
+    c4.xlarge:
+      Arch: NATHVM64
+    c4.2xlarge:
+      Arch: NATHVM64
+    c4.4xlarge:
+      Arch: NATHVM64
+    c4.8xlarge:
+      Arch: NATHVM64
+    g2.2xlarge:
+      Arch: NATHVMG2
+    g2.8xlarge:
+      Arch: NATHVMG2
+    r3.large:
+      Arch: NATHVM64
+    r3.xlarge:
+      Arch: NATHVM64
+    r3.2xlarge:
+      Arch: NATHVM64
+    r3.4xlarge:
+      Arch: NATHVM64
+    r3.8xlarge:
+      Arch: NATHVM64
+    i2.xlarge:
+      Arch: NATHVM64
+    i2.2xlarge:
+      Arch: NATHVM64
+    i2.4xlarge:
+      Arch: NATHVM64
+    i2.8xlarge:
+      Arch: NATHVM64
+    d2.xlarge:
+      Arch: NATHVM64
+    d2.2xlarge:
+      Arch: NATHVM64
+    d2.4xlarge:
+      Arch: NATHVM64
+    d2.8xlarge:
+      Arch: NATHVM64
+    hi1.4xlarge:
+      Arch: NATHVM64
+    hs1.8xlarge:
+      Arch: NATHVM64
+    cr1.8xlarge:
+      Arch: NATHVM64
+    cc2.8xlarge:
+      Arch: NATHVM64
+  AWSRegionArch2AMI:
+    us-east-1:
+      HVM64: ami-0b898040803850657
+      HVMG2: ami-0ad82a384c06c911e
+    us-west-2:
+      HVM64: ami-082b5a644766e0e6f
+      HVMG2: ami-006fd2260be98254c
+    us-west-1:
+      HVM64: ami-056ee704806822732
+      HVMG2: NOT_SUPPORTED
+    us-east-2:
+      HVM64: ami-0d8f6eb4f641ef691
+      HVMG2: ami-0f378490dca16e3f4
+Resources:
+  WAYFWebGroup:
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    Properties:
+      VPCZoneIdentifier:
+        - !ImportValue AZ1AppSubnetID
+        - !ImportValue AZ2AppSubnetID
+      MinSize: '2'
+      MaxSize: '6'
+      TargetGroupARNs:
+        - !Ref ELBTargetGroup
+      LaunchConfigurationName: !Ref ASGLaunchConfig
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT10M
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MinInstancesInService: '1'
+        MaxBatchSize: '1'
+        PauseTime: PT10M
+        WaitOnResourceSignals: 'true'
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: bdbf6ae5-6ed4-4fe4-8870-1363e451c5b9
+  ASGLaunchConfig:
+    Type: 'AWS::AutoScaling::LaunchConfiguration'
+    Metadata:
+      'AWS::CloudFormation::Init':
+        configSets:
+          InstallAndRun:
+            - CreateRepos
+            - Install
+        CreateRepos:
+          files:
+            /etc/yum.repos.d/shibboleth-security.repo:
+              content: !Join 
+                - ''
+                - - |
+                    [security_shibboleth]
+                  - >
+                    # If the mirrors stop working, change download to
+                    downloadcontent...
+                  - |
+                    name=Shibboleth (CentOS_7)
+                  - |
+                    type=rpm-md
+                  - >
+                    baseurl=http://download.opensuse.org/repositories/security:/shibboleth/CentOS_7/
+                  - |
+                    gpgcheck=1
+                  - >
+                    gpgkey=http://download.opensuse.org/repositories/security:/shibboleth/CentOS_7/repodata/repomd.xml.key
+                  - |
+                    enabled=1
+              mode: '000644'
+              owner: root
+              group: root
+            /etc/update-motd.d/35-banner:
+              content: !Join 
+                - ''
+                - - |
+                    #!/bin/sh
+                  - |
+                    cat /etc/motd-banner
+              mode: '000755'
+              owner: root
+              group: root
+            /tmp/config_shibboleth.sh:
+              content: !Sub 
+                - >
+                  #!/bin/bash
+
+                  # Pull Zip password from SSM
+                  
+                  zipsecret=$(aws --region ${AWS::Region} ssm get-parameters --name ${SSMPassParm} --with-decryption | grep Value | sed 's/[", ]//g' | sed 's/Value://g')
+
+                  # Download and Unzip WWW Files
+
+                  aws s3 cp
+                  s3://${BucketName}/${UTGroup}-config/${UTGroup}-wayf-html.zip
+                  /tmp/
+
+                  sudo unzip -o /tmp/${UTGroup}-wayf-html.zip -d
+                  /etc/shibboleth-ds/
+
+                  sudo chown apache:apache /etc/shibboleth-ds/*.css
+
+                  sudo chown apache:apache /etc/shibboleth-ds/*.svg  /etc/shibboleth-ds/*.gif /etc/shibboleth-ds/*.jpg
+
+                  sudo chown apache:apache /etc/shibboleth-ds/idpselect.js
+
+                  sudo chown apache:apache /etc/shibboleth-ds/*.html    
+
+                  #
+
+                  # Download Configuration Files from S3 Bucket
+
+                  aws s3 cp
+                  s3://${BucketName}/Deployment-Stacks/config_host.sh
+                  /tmp/
+
+                  sudo chmod 755 /tmp/config_host.sh
+
+                  aws s3 cp
+                  s3://${BucketName}/${UTGroup}-config/shibboleth-sp-certs.zip
+                  /tmp/
+
+                  sudo rm /etc/shibboleth/shibboleth2.xml
+
+                  aws s3 cp
+                  s3://${BucketName}/${UTGroup}-config/shibboleth2.xml
+                  /etc/shibboleth/
+
+                  sudo rm /etc/shibboleth-ds/idpselect_config.js
+
+                  aws s3 cp
+                  s3://${BucketName}/${UTGroup}-config/idpselect_config.js
+                  /etc/shibboleth-ds/
+
+                  sudo rm /etc/httpd/conf.d/shibboleth-ds.conf
+
+                  aws s3 cp
+                  s3://${BucketName}/${UTGroup}-config/shibboleth-ds.conf
+                  /etc/httpd/conf.d/
+
+                  #
+
+                  # Unzip Shibboleth Certificate Files into Shibboleth Settings 
+
+                  sudo rm /etc/shibboleth/*.pem
+
+                  sudo unzip -P $zipsecret
+                  /tmp/shibboleth-sp-certs.zip -d /etc/shibboleth/
+
+                  sudo chown shibd:shibd /etc/shibboleth/*.pem
+
+                  sudo chmod 600 /etc/shibboleth/*key.pem
+
+                  sudo chmod 644 /etc/shibboleth/*cert.pem
+
+                  #
+
+                  # Change MOTD Banner
+
+                  sudo aws s3 cp
+                  s3://${BucketName}/${UTGroup}-config/${UTGroup}.banner
+                  /etc/motd-banner
+
+                  sudo update-motd
+
+                  # Update httpd.conf with Custom LogFormat
+
+                  sudo sed -i.bak -e '/ErrorLog \"logs\/error_log\"/i ErrorLogFormat \"[%{u}t] [%-m:%l] [pid %P] %E: [client %a \/ %{X-Forwarded-For}i] %M% , referer %{Referer}i\"' /etc/httpd/conf/httpd.conf
+
+                  sudo sed -i.bak -e '/.*LogFormat "%h %l %u %t .* common/i \    \LogFormat "%{X-Forwarded-For}i %l %u %t \\"%r\\" %>s %b \\"%{Referer}i\\" \\"%{User-Agent}i\\"" proxy' /etc/httpd/conf/httpd.conf
+
+                  sudo sed -i.bak -e 's/^[^#]*\(CustomLog \"logs\/access_log\" combined\)$/    # \1/' /etc/httpd/conf/httpd.conf
+
+                  sudo sed -i.bak -e 's/#.*CustomLog.*combined$/# Added for forwarded connections:\n\    \SetEnvIf X-Forwarded-For \"^.*\\..*\\..*\\..*\" forwarded\n\    \CustomLog \"logs\/access_log\" combined env=!forwarded\n\    \CustomLog \"logs\/access_log\" proxy env=forwarded/' /etc/httpd/conf/httpd.conf
+
+                  # Restart HTTPD and Shibboleth
+
+                  sudo systemctl restart httpd
+
+                  sudo systemctl restart shibd
+
+                  # Setup OS Configuration for Loggin
+
+                  sudo /tmp/config_host.sh
+
+                  # Cleanup
+
+                  sudo rm /tmp/${UTGroup}-wayf-html.zip
+
+                  sudo rm /tmp/shibboleth-sp-certs.zip
+
+                  sudo rm /tmp/config_host.sh
+                - UTGroup: !FindInMap 
+                    - HostToGroup
+                    - !Ref ClusterHost
+                    - Group
+                  BucketName: !Ref S3BucketName
+                  SSMPassParm: !Ref SSMPassParameter
+              mode: '000755'
+              owner: root
+              group: root
+        Install:
+          packages:
+            yum:
+              httpd: []
+              mod_ssl: []
+              php: []
+              shibboleth:
+                - 3.0.4-3.2
+              shibboleth-embedded-ds:
+                - 1.2.2-3.1
+          files:
+            /var/www/html/index.html:
+              content: !Join 
+                - ''
+                - - |
+                    <html>
+                  - |2
+                      <head>
+                  - |2
+                        <meta http-equiv="Refresh" content="0; url=https://www.utsystem.edu" />
+                  - |2
+                      </head>
+                  - |2
+                      <body>
+                  - |2
+                      </body>
+                  - |
+                    </html>
+              mode: '000600'
+              owner: apache
+              group: apache
+            /etc/cfn/cfn-hup.conf:
+              content: !Join 
+                - ''
+                - - |
+                    [main]
+                  - stack=
+                  - !Ref 'AWS::StackId'
+                  - |+
+
+                  - region=
+                  - !Ref 'AWS::Region'
+                  - |+
+
+              mode: '000400'
+              owner: root
+              group: root
+            /etc/cfn/hooks.d/cfn-auto-reloader.conf:
+              content: !Join 
+                - ''
+                - - |
+                    [cfn-auto-reloader-hook]
+                  - |
+                    triggers=post.update
+                  - >
+                    path=Resources.WebServerInstance.Metadata.AWS::CloudFormation::Init
+                  - 'action=/opt/aws/bin/cfn-init -v '
+                  - '         --stack '
+                  - !Ref 'AWS::StackName'
+                  - '         --resource WebServerInstance '
+                  - '         --configsets InstallAndRun '
+                  - '         --region '
+                  - !Ref 'AWS::Region'
+                  - |+
+
+                  - |
+                    runas=root
+              mode: '000400'
+              owner: root
+              group: root
+          services:
+            sysvinit:
+              httpd:
+                enabled: 'true'
+                ensureRunning: 'true'
+              shibd:
+                enabled: 'true'
+                ensureRunning: 'true'
+              cfn-hup:
+                enabled: 'true'
+                ensureRunning: 'true'
+                files:
+                  - /etc/cfn/cfn-hup.conf
+                  - /etc/cfn/hooks.d/cfn-auto-reloader.conf
+          commands:
+            ConfigShibboleth:
+              command: /tmp/config_shibboleth.sh
+      'AWS::CloudFormation::Designer':
+        id: ff1eadf4-5c69-4ac0-ae40-34061e60ee11
+    Properties:
+      ImageId: !FindInMap 
+        - AWSRegionArch2AMI
+        - !Ref 'AWS::Region'
+        - !FindInMap 
+          - AWSInstanceType2Arch
+          - !Ref InstanceType
+          - Arch
+      InstanceType: !Ref InstanceType
+      SecurityGroups:
+        - !ImportValue InstanceSecGroup
+      KeyName: !Ref KeyName
+      IamInstanceProfile: !ImportValue EC2IAMInstProfile
+      UserData: !Base64 
+        'Fn::Join':
+          - ''
+          - - |
+              #!/bin/bash -xe
+            - |
+              yum update -y aws-cfn-bootstrap
+            - |
+              yum update -y
+            - |
+            - !Sub
+                - "CLOUDWATCHGROUP=${LogGroupParm}"
+                - LogGroupParm: !Ref LogGroupName
+            - |+
+
+            - !Sub
+                - "ClusterName=${UTGroup}ds"
+                - UTGroup: !FindInMap 
+                    - HostToGroup
+                    - !Ref ClusterHost
+                    - Group              
+            - |+
+
+            - |  
+              # Install the files and packages from the metadata
+            - '/opt/aws/bin/cfn-init -v '
+            - '         --stack '
+            - !Ref 'AWS::StackName'
+            - '         --resource ASGLaunchConfig '
+            - '         --configsets InstallAndRun '
+            - '         --region '
+            - !Ref 'AWS::Region'
+            - |+
+
+            - |
+              # Signal the status from cfn-init
+            - '/opt/aws/bin/cfn-signal -e $? '
+            - '         --stack '
+            - !Ref 'AWS::StackName'
+            - '         --resource WAYFWebGroup '
+            - '         --region '
+            - !Ref 'AWS::Region'
+            - ''
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT5M
+  ELBTargetGroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      Port: 80
+      Protocol: HTTP
+      UnhealthyThresholdCount: 5
+      VpcId: !ImportValue VPCID
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 32b67050-3638-4fe7-826a-88bf7c809d81
+  DNSELBCNAME:
+    Type: 'AWS::Route53::RecordSet'
+    Properties:
+      HostedZoneName: !Sub
+        - '${ZoneName}.'
+        - ZoneName: !Ref HostedZone
+      Name: !Sub 
+        - '${host}.${ZoneName}.'
+        - host: !Ref ClusterHost
+          ZoneName: !Ref HostedZone
+      Type: CNAME
+      TTL: 900
+      ResourceRecords: 
+        - !ImportValue LoadBalancerFQDN
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: a3eb3604-ca69-48e2-8b2e-3207a716d6c8
+  ELBListRule:
+    Type: 'AWS::ElasticLoadBalancingV2::ListenerRule'
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref ELBTargetGroup
+      Conditions:
+        - Field: host-header
+          HostHeaderConfig:
+            Values:
+              - !Sub 
+                - '${host}.${HostedZone}'
+                - host: !Ref ClusterHost
+                  HostedZone: !Ref HostedZone
+      ListenerArn: !ImportValue ELBListenerARN
+      Priority: !Ref RulePriority
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: a8d9f656-bcc1-4e26-8b0d-253aeaba4335
+  SSHMetricFilter:
+    Type: 'AWS::Logs::MetricFilter'
+    Properties:
+      LogGroupName: !Ref LogGroupName
+      FilterPattern: ON FROM USER PWD
+      MetricTransformations:
+        - MetricName: SSHCommandCount
+          MetricValue: '1'
+          MetricNamespace: !Join 
+            - /
+            - - DiscoverySrv
+              - !Ref 'AWS::StackName'
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 879ae53a-8ef9-4740-8b0c-8ed5847899d8
+  ScaleByConnections:
+    Type: 'AWS::AutoScaling::ScalingPolicy'
+    Properties:
+      AutoScalingGroupName: !Ref WAYFWebGroup
+      EstimatedInstanceWarmup: 180
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        DisableScaleIn: false
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ALBRequestCountPerTarget
+          ResourceLabel: !Join 
+            - ''
+            - - !Select 
+                  - 1
+                  - !Split 
+                      - ':loadbalancer/'
+                      - !ImportValue LoadBalancerARN
+              - /targetgroup/
+              - !Select 
+                  - 1
+                  - !Split 
+                      - ':targetgroup/'
+                      - !Ref ELBTargetGroup
+        TargetValue: 700
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: d3827d93-2d43-40ea-b103-44f62930a6bf
+Metadata:
+  'AWS::CloudFormation::Designer':
+    a3eb3604-ca69-48e2-8b2e-3207a716d6c8:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 380
+        'y': 200
+      z: 1
+      embeds: []
+    32b67050-3638-4fe7-826a-88bf7c809d81:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 180
+        'y': 90
+      z: 1
+      embeds: []
+    ff1eadf4-5c69-4ac0-ae40-34061e60ee11:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 60
+        'y': 210
+      z: 1
+      embeds: []
+    bdbf6ae5-6ed4-4fe4-8870-1363e451c5b9:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 180
+        'y': 210
+      z: 1
+      embeds: []
+      isassociatedwith:
+        - ff1eadf4-5c69-4ac0-ae40-34061e60ee11
+        - 32b67050-3638-4fe7-826a-88bf7c809d81
+    a8d9f656-bcc1-4e26-8b0d-253aeaba4335:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 300
+        'y': 90
+      z: 1
+      embeds: []
+    879ae53a-8ef9-4740-8b0c-8ed5847899d8:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 290
+        'y': 200
+      z: 1
+      embeds: []
+    d3827d93-2d43-40ea-b103-44f62930a6bf:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 60
+        'y': 90
+      z: 0
+      embeds: []
+      isassociatedwith:
+        - bdbf6ae5-6ed4-4fe4-8870-1363e451c5b9
+        
